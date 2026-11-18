@@ -145,7 +145,7 @@ div.stButton > button:hover {
 button[data-baseweb="tab"] { font-weight: 700; font-size: 1.05rem; color: var(--wood); }
 </style>
 <div class="hero">
-    <h1>🔐 Enkripsi & Dekripsi RSA</h1>
+    <h1> Enkripsi & Dekripsi RSA</h1>
     <p>Masukkan sendiri nilai <b>p</b> dan <b>q</b> &middot; berbasis kode <b>ASCII</b></p>
 </div>
 """,
@@ -190,7 +190,7 @@ def table(headers, rows):
     )
 
 
-st.markdown('<div class="section-title">🔑 1. Input Kunci</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title"> 1. Input Kunci</div>', unsafe_allow_html=True)
 col1, col2, col3 = st.columns(3)
 p = col1.number_input("p (prima)", min_value=2, value=1009, step=1)
 q = col2.number_input("q (prima)", min_value=2, value=1013, step=1)
@@ -209,23 +209,23 @@ if keys:
     c1.markdown(key_card("k-n", "n = p × q", n), unsafe_allow_html=True)
     c2.markdown(key_card("k-phi", "φ(n) = (p-1)(q-1)", phi), unsafe_allow_html=True)
     c3, c4 = st.columns(2)
-    c3.markdown(key_card("k-pub", "🔓 Kunci Publik (e, n)", f"({e}, {n})"), unsafe_allow_html=True)
-    c4.markdown(key_card("k-prv", "🔒 Kunci Privat (d, n)", f"({d}, {n})"), unsafe_allow_html=True)
+    c3.markdown(key_card("k-pub", " Kunci Publik (e, n)", f"({e}, {n})"), unsafe_allow_html=True)
+    c4.markdown(key_card("k-prv", " Kunci Privat (d, n)", f"({d}, {n})"), unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">💬 2. Pesan</div>', unsafe_allow_html=True)
-    tab_enc, tab_dec = st.tabs(["🔐 Enkripsi", "🔓 Dekripsi"])
+    st.markdown('<div class="section-title"> 2. Pesan</div>', unsafe_allow_html=True)
+    tab_enc, tab_dec = st.tabs([" Enkripsi", " Dekripsi"])
 
     with tab_enc:
         plain = st.text_area("Plaintext (karakter ASCII)", height=120, key="plain",
                              placeholder="Ketik pesan rahasiamu di sini...")
-        if st.button("🚀 Enkripsi"):
+        if st.button(" Enkripsi"):
             if not plain:
                 st.warning("Isi plaintext dulu.")
             else:
                 try:
                     rows = encrypt_steps(plain, e, n)
                     cipher_out = " ".join(str(r[2]) for r in rows)
-                    st.markdown(result_box("🔐 Ciphertext", cipher_out), unsafe_allow_html=True)
+                    st.markdown(result_box(" Ciphertext", cipher_out), unsafe_allow_html=True)
                     st.caption("Salin angka di atas ke tab Dekripsi.")
                     st.markdown(
                         table(
@@ -240,14 +240,14 @@ if keys:
     with tab_dec:
         cipher = st.text_area("Ciphertext (angka dipisah spasi)", height=120, key="cipher",
                               placeholder="Tempel ciphertext di sini...")
-        if st.button("🔑 Dekripsi"):
+        if st.button("Dekripsi"):
             if not cipher.strip():
                 st.warning("Isi ciphertext dulu.")
             else:
                 try:
                     rows = decrypt_steps(cipher, d, n)
                     plain_out = "".join(r[2] for r in rows)
-                    st.markdown(result_box("🔓 Plaintext", plain_out, "dec"), unsafe_allow_html=True)
+                    st.markdown(result_box("Plaintext", plain_out, "dec"), unsafe_allow_html=True)
                     st.markdown(
                         table(
                             ["Cipher (c)", f"ASCII (c^{d} mod {n})", "Karakter"],
