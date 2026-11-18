@@ -1,8 +1,15 @@
 """
 Aplikasi Enkripsi & Dekripsi RSA (input p dan q manual) - versi Streamlit
-Memakai kode ASCII (0-127) untuk tiap karakter pesan.
+Memakai kode ASCII (0-127) untuk tiap karakter pesan, dengan ukuran blok yang bisa dipilih.
 Jalankan lokal: streamlit run app.py
 Catatan: untuk edukasi. Jangan dipakai untuk mengamankan data sungguhan.
+
+Cara kerja blok:
+- Tiap karakter -> kode ASCII 3 digit (mis. 'A' = 065).
+- k karakter digabung jadi satu blok angka (mis. "AB" -> 065066 -> m = 65066).
+- Syarat: m < n untuk semua kemungkinan blok, yaitu "127" * k < n.
+- Blok terakhir yang kurang dari k karakter diisi padding kode 0 (NUL),
+  dan padding itu dibuang lagi saat dekripsi.
 """
 from math import gcd, isqrt
 
@@ -87,26 +94,82 @@ def euclid_steps(e, phi):
     return rows, old_r, old_s  # old_r = gcd, old_s = koefisien e
 
 
-def encrypt_steps(text, e, n):
-    """Return list of (karakter, kode ASCII, cipher)."""
-    rows = []
+# ---------------- Logika blok ----------------
+def max_block_size(n):
+    """Ukuran blok terbesar (karakter/blok) agar semua blok pasti < n."""
+    k = 1
+    while int("127" * (k + 1)) < n:
+        k += 1
+    return k
+
+
+def show_char(c):
+    """Tampilan aman untuk satu karakter di tabel."""
+    if c == 0:
+        return "∅"  # padding
+    if c == 32:
+        return "␣"
+    if c < 32 or c == 127:
+        return f"[{c}]"
+    return chr(c)
+
+
+def encrypt_blocks(text, e, n, k):
+    """Return (rows, jumlah_padding).
+    rows: (no, karakter, kode ASCII gabungan, m, cipher)."""
+    codes = []
     for ch in text:
         code = ord(ch)
         if code > 127:
             raise ValueError(f"Karakter '{ch}' bukan ASCII (0-127).")
-        rows.append((ch, code, pow(code, e, n)))
-    return rows
+        codes.append(code)
 
+    pad = (-len(codes)) % k
+    codes += [0] * pad
 
-def decrypt_steps(cipher, d, n):
-    """Return list of (cipher, kode ASCII, karakter)."""
     rows = []
-    for c in cipher.split():
-        code = pow(int(c), d, n)
-        if code > 127:
-            raise ValueError("Hasil bukan kode ASCII, kunci tidak cocok.")
-        rows.append((int(c), code, chr(code)))
-    return rows
+    for i in range(0, len(codes), k):
+        chunk = codes[i:i + k]
+        digits = "".join(f"{c:03d}" for c in chunk)
+        m = int(digits)
+        if m >= n:  # pengaman, seharusnya tidak terjadi karena k <= max_block_size
+            raise ValueError("Blok melebihi n, perkecil ukuran blok.")
+        rows.append((
+            len(rows) + 1,
+            "".join(show_char(c) for c in chunk),
+            digits,
+            m,
+            pow(m, e, n),
+        ))
+    return rows, pad
+
+
+def decrypt_blocks(cipher, d, n, k):
+    """Return (rows, plaintext).
+    rows: (no, cipher, m, kode ASCII gabungan, karakter)."""
+    rows, all_codes = [], []
+    for tok in cipher.split():
+        c = int(tok)
+        if not 0 <= c < n:
+            raise ValueError("Ciphertext harus 0 <= c < n.")
+        m = pow(c, d, n)
+        digits = str(m).zfill(3 * k)
+        if len(digits) > 3 * k:
+            raise ValueError("Ukuran blok tidak cocok dengan ciphertext.")
+        codes = [int(digits[i:i + 3]) for i in range(0, 3 * k, 3)]
+        if any(x > 127 for x in codes):
+            raise ValueError("Hasil bukan kode ASCII, kunci atau ukuran blok tidak cocok.")
+        rows.append((
+            len(rows) + 1,
+            c,
+            m,
+            digits,
+            "".join(show_char(x) for x in codes),
+        ))
+        all_codes.extend(codes)
+
+    plaintext = "".join(chr(x) for x in all_codes).rstrip("\x00")  # buang padding
+    return rows, plaintext
 
 
 # ---------------- Tampilan ----------------
@@ -184,7 +247,7 @@ button[data-baseweb="tab"] { font-weight: 700; font-size: 1.05rem; color: var(--
 </style>
 <div class="hero">
     <h1>Enkripsi & Dekripsi RSA</h1>
-    <p>Masukkan sendiri nilai <b>p</b> dan <b>q</b> &middot; berbasis kode <b>ASCII</b></p>
+    <p>Masukkan sendiri nilai <b>p</b> dan <b>q</b> &middot; berbasis kode <b>ASCII</b> &middot; ukuran <b>blok</b> bisa dipilih</p>
 </div>
 """,
     unsafe_allow_html=True,
@@ -243,6 +306,25 @@ except ValueError as ex:
 if keys:
     n, phi, e, d = keys
     p, q = int(p), int(q)
+
+    # ---------------- Ukuran blok ----------------
+    k_max = max_block_size(n)
+    st.markdown('<div class="section-title">Ukuran Blok</div>', unsafe_allow_html=True)
+    k = int(
+        st.number_input(
+            "Jumlah karakter per blok",
+            min_value=1,
+            max_value=k_max,
+            value=min(2, k_max),
+            step=1,
+            help="Dipakai bersama di tab Enkripsi dan Dekripsi. "
+                 "Ukuran blok saat dekripsi harus sama dengan saat enkripsi.",
+        )
+    )
+    st.caption(
+        f"Maksimal {k_max} karakter/blok untuk n = {n} "
+        f"(syarat: {'127' * k_max} < n). Makin besar n, makin besar blok yang bisa dipakai."
+    )
 
     # ---------------- Tab: Pembangkitan Kunci | Enkripsi | Dekripsi ----------------
     tab_key, tab_enc, tab_dec = st.tabs(["Pembangkitan Kunci", "Enkripsi", "Dekripsi"])
@@ -339,6 +421,17 @@ if keys:
             unsafe_allow_html=True,
         )
 
+        # Langkah 7: batas ukuran blok
+        st.markdown(
+            step_box(
+                "Langkah 7 - Batas ukuran blok",
+                f"Blok terbesar k karakter = {'127' * k_max} (k = {k_max}) &lt; n = {n}",
+                f'Dengan k = {k_max + 1} nilai blok bisa mencapai {"127" * (k_max + 1)} '
+                f'&ge; n, sehingga tidak aman. Ukuran blok yang dipilih: <b>{k}</b> karakter.',
+                "s4",
+            ),
+            unsafe_allow_html=True,
+        )
 
     # ---- Tab Enkripsi: hanya kunci publik ----
     with tab_enc:
@@ -346,6 +439,7 @@ if keys:
             key_card("k-pub", "Kunci Publik (e, n)", f"({e}, {n})"),
             unsafe_allow_html=True,
         )
+        st.caption(f"Ukuran blok: {k} karakter/blok")
         plain = st.text_area("Plaintext (karakter ASCII)", height=120, key="plain",
                              placeholder="Ketik pesan rahasiamu di sini...")
         if st.button("Enkripsi"):
@@ -353,10 +447,24 @@ if keys:
                 st.warning("Isi plaintext dulu.")
             else:
                 try:
-                    rows = encrypt_steps(plain, e, n)
-                    cipher_out = " ".join(str(r[2]) for r in rows)
+                    rows, pad = encrypt_blocks(plain, e, n, k)
+                    cipher_out = " ".join(str(r[4]) for r in rows)
                     st.markdown(result_box("Ciphertext", cipher_out), unsafe_allow_html=True)
-                    st.caption("Salin angka di atas ke tab Dekripsi.")
+                    st.caption("Salin angka di atas ke tab Dekripsi "
+                               "(ukuran blok harus sama).")
+                    if pad:
+                        st.caption(
+                            f"Blok terakhir diisi {pad} karakter padding (kode 000, "
+                            "tampil sebagai ∅) agar penuh."
+                        )
+                    st.markdown(
+                        table(
+                            ["Blok", "Karakter", "Kode ASCII gabungan", "m",
+                             f"c = m<sup>{e}</sup> mod {n}"],
+                            rows,
+                        ),
+                        unsafe_allow_html=True,
+                    )
                 except ValueError as ex:
                     st.error(str(ex))
 
@@ -366,6 +474,7 @@ if keys:
             key_card("k-prv", "Kunci Privat (d, n)", f"({d}, {n})"),
             unsafe_allow_html=True,
         )
+        st.caption(f"Ukuran blok: {k} karakter/blok (samakan dengan saat enkripsi)")
         cipher = st.text_area("Ciphertext (angka dipisah spasi)", height=120, key="cipher",
                               placeholder="Tempel ciphertext di sini...")
         if st.button("Dekripsi"):
@@ -373,8 +482,22 @@ if keys:
                 st.warning("Isi ciphertext dulu.")
             else:
                 try:
-                    rows = decrypt_steps(cipher, d, n)
-                    plain_out = "".join(r[2] for r in rows)
+                    rows, plain_out = decrypt_blocks(cipher, d, n, k)
                     st.markdown(result_box("Plaintext", plain_out, "dec"), unsafe_allow_html=True)
-                except (ValueError, OverflowError):
-                    st.error("Ciphertext tidak valid atau kunci (p, q) tidak cocok.")
+                    st.markdown(
+                        table(
+                            ["Blok", "Cipher c", f"m = c<sup>{d}</sup> mod {n}",
+                             "Kode ASCII gabungan", "Karakter"],
+                            rows,
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                except (ValueError, OverflowError) as ex:
+                    msg = str(ex)
+                    if msg.startswith("invalid literal"):
+                        msg = "Ciphertext harus berupa angka dipisah spasi."
+                    st.error(
+                        msg if msg and "kunci" in msg.lower() or "Ukuran blok" in msg
+                        or "Ciphertext" in msg
+                        else "Ciphertext tidak valid, atau kunci (p, q) / ukuran blok tidak cocok."
+                    )
