@@ -1,6 +1,4 @@
 """
-
-test
 Aplikasi Enkripsi & Dekripsi RSA (input p dan q manual) - versi Streamlit
 Memakai kode ASCII (0-127) untuk tiap karakter pesan.
 Jalankan lokal: streamlit run app.py
